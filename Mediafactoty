@@ -1,0 +1,721 @@
+┌─────────────────────────────────────────┐
+│           🏭 MEDIAFACTORY CORE          │
+│         (Kevyt, skaalautuva runko)      │
+├─────────────────────────────────────────┤
+│  • API Gateway      • Plugin Manager    │
+│  • Job Queue        • Metadata Engine   │
+│  • Storage Abstraction                  │
+└─────────────────────────────────────────┘
+                    │
+    ┌───────────────┼───────────────┐
+    ▼               ▼               ▼
+┌─────────┐   ┌─────────┐   ┌─────────┐
+│ 🎬 VIDEO │   │ 🖼️ IMAGE │   │ 🔊 AUDIO │
+│  PLUGIN  │   │  PLUGIN  │   │  PLUGIN  │
+├─────────┤   ├─────────┤   ├─────────┤
+│• PIPU   │   │• Filters│   │• TTS    │
+│• Kettu  │   │• Enhance│   │• Mix    │
+│• FX     │   │• Convert│   │• Effects│
+└─────────┘   └─────────┘   └─────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│      🔌 CUSTOM PLUGIN (sinun koodi)     │
+│  • Yrityskohtaiset ominaisuudet         │
+│  • Uudet efektit                        │
+│  • Integraatiot                         │
+└─────────────────────────────────────────┘
+
+#!/bin/bash
+# 🏭 MEGAFACTORY - Modulaarinen Media Platform
+# Kevyt runko + laajennuspaketit
+
+set -e
+echo "🏭 MEGAFACTORY - Asennus alkaa..."
+
+FACTORY="mediafactory"
+mkdir -p $FACTORY && cd $FACTORY
+
+# ============================================================================
+# 1. CORE (Kevyt runko - ei raskaita kirjastoja)
+# ============================================================================
+
+mkdir -p core/{plugins,queue,storage,api}
+
+cat > core/requirements.txt << 'CORE_REQ'
+fastapi==0.110.0
+uvicorn[standard]==0.28.0
+pydantic==2.6.0
+python-dotenv==1.0.0
+redis==5.0.1
+aiofiles==23.2.1
+watchdog==3.0.0  # Plugin hot-reload
+CORE_REQ
+
+# CORE: Plugin System
+cat > core/plugin_manager.py << 'PLUGIN_PY'
+"""
+🏭 Plugin Manager - Laajennusten dynaminen lataus
+"""
+import importlib
+import os
+import json
+from typing import Dict, List, Optional, Callable
+from dataclasses import dataclass
+from enum import Enum
+
+class PluginType(Enum):
+    VIDEO = "video"
+    IMAGE = "image"
+    AUDIO = "audio"
+    AI = "ai"
+    CUSTOM = "custom"
+
+@dataclass
+class PluginManifest:
+    name: str
+    version: str
+    type: PluginType
+    entry_point: str  # Python moduuli
+    config_schema: Dict
+    dependencies: List[str]
+    resource_limits: Dict  # CPU, RAM, GPU
+
+class PluginManager:
+    def __init__(self, plugins_dir: str = "./plugins"):
+        self.plugins_dir = plugins_dir
+        self.loaded_plugins: Dict[str, PluginManifest] = {}
+        self.hooks: Dict[str, List[Callable]] = {}
+        
+    def discover(self) -> List[PluginManifest]:
+        """Etsi kaikki plugin-kansiot"""
+        manifests = []
+        
+        for plugin_name in os.listdir(self.plugins_dir):
+            manifest_path = os.path.join(self.plugins_dir, plugin_name, "manifest.json")
+            
+            if os.path.exists(manifest_path):
+                with open(manifest_path) as f:
+                    data = json.load(f)
+                    manifests.append(PluginManifest(
+                        name=data["name"],
+                        version=data["version"],
+                        type=PluginType(data["type"]),
+                        entry_point=data["entry_point"],
+                        config_schema=data.get("config_schema", {}),
+                        dependencies=data.get("dependencies", []),
+                        resource_limits=data.get("resource_limits", {})
+                    ))
+        
+        return manifests
+    
+    def load(self, manifest: PluginManifest) -> bool:
+        """Lataa plugin dynaamisesti"""
+        try:
+            # Tarkista riippuvuudet
+            for dep in manifest.dependencies:
+                if not self._check_dependency(dep):
+                    print(f"⚠️ Puuttuva riippuvuus: {dep}")
+                    return False
+            
+            # Importoi moduuli
+            module_path = f"plugins.{manifest.name}.{manifest.entry_point}"
+            module = importlib.import_module(module_path)
+            
+            # Rekisteröi hookit
+            if hasattr(module, "register"):
+                module.register(self)
+            
+            self.loaded_plugins[manifest.name] = manifest
+            print(f"✅ Plugin ladattu: {manifest.name} v{manifest.version}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Virhe ladattaessa {manifest.name}: {e}")
+            return False
+    
+    def register_hook(self, event: str, callback: Callable):
+        """Rekisteröi callback tapahtumalle"""
+        if event not in self.hooks:
+            self.hooks[event] = []
+        self.hooks[event].append(callback)
+    
+    def trigger(self, event: str, **kwargs):
+        """Laukaise kaikki hookit"""
+        for callback in self.hooks.get(event, []):
+            try:
+                callback(**kwargs)
+            except Exception as e:
+                print(f"⚠️ Hook virhe: {e}")
+    
+    def _check_dependency(self, dep: str) -> bool:
+        try:
+            importlib.import_module(dep)
+            return True
+        except ImportError:
+            return False
+
+# Singleton
+plugin_manager = PluginManager()
+PLUGIN_PY
+
+# CORE: Job Queue
+cat > core/job_queue.py << 'QUEUE_PY'
+"""
+📋 Hajautettu työjono - Redis-pohjainen
+"""
+import json
+import redis
+import uuid
+from datetime import datetime
+from typing import Optional, Dict, Any
+from enum import Enum
+
+class JobStatus(Enum):
+    PENDING = "pending"
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class JobQueue:
+    def __init__(self, redis_url: str = "redis://localhost:6379"):
+        self.redis = redis.from_url(redis_url, decode_responses=True)
+        self.queues = {
+            "video": "queue:video",
+            "image": "queue:image", 
+            "audio": "queue:audio",
+            "ai": "queue:ai"
+        }
+    
+    def submit(self, 
+               job_type: str,
+               plugin: str,
+               payload: Dict,
+               priority: int = 5) -> str:
+        """
+        Lisää työ jonoon
+        
+        Args:
+            job_type: video/image/audio/ai
+            plugin: Mikä plugin käsittelee
+            payload: Työn data
+            priority: 1-10 (1 = korkein)
+        """
+        job_id = str(uuid.uuid4())
+        
+        job = {
+            "id": job_id,
+            "type": job_type,
+            "plugin": plugin,
+            "payload": payload,
+            "status": JobStatus.PENDING.value,
+            "priority": priority,
+            "created_at": datetime.utcnow().isoformat(),
+            "started_at": None,
+            "completed_at": None
+        }
+        
+        # Lisää prioriteetin mukaan (sorted set)
+        queue_name = self.queues.get(job_type, "queue:default")
+        self.redis.zadd(queue_name, {json.dumps(job): priority})
+        
+        # Päivitä status
+        self.redis.set(f"job:{job_id}:status", JobStatus.QUEUED.value)
+        
+        return job_id
+    
+    def pop(self, job_type: str, timeout: int = 5) -> Optional[Dict]:
+        """Ota seuraava työ jonosta"""
+        queue_name = self.queues.get(job_type, "queue:default")
+        
+        # Pop pienin score (korkein prioriteetti)
+        result = self.redis.zpopmin(queue_name, count=1)
+        
+        if result:
+            job_data = json.loads(result[0][0])
+            job_data["status"] = JobStatus.PROCESSING.value
+            job_data["started_at"] = datetime.utcnow().isoformat()
+            
+            self.redis.set(f"job:{job_data['id']}:status", JobStatus.PROCESSING.value)
+            self.redis.set(f"job:{job_data['id']}:data", json.dumps(job_data))
+            
+            return job_data
+        
+        return None
+    
+    def complete(self, job_id: str, result: Dict):
+        """Merkitse työ valmiiksi"""
+        self.redis.set(f"job:{job_id}:status", JobStatus.COMPLETED.value)
+        self.redis.set(f"job:{job_id}:result", json.dumps(result))
+        self.redis.set(f"job:{job_id}:completed_at", datetime.utcnow().isoformat())
+    
+    def fail(self, job_id: str, error: str):
+        """Merkitse työ epäonnistuneeksi"""
+        self.redis.set(f"job:{job_id}:status", JobStatus.FAILED.value)
+        self.redis.set(f"job:{job_id}:error", error)
+    
+    def get_status(self, job_id: str) -> Optional[Dict]:
+        """Hae työn status"""
+        status = self.redis.get(f"job:{job_id}:status")
+        if not status:
+            return None
+        
+        result = {
+            "id": job_id,
+            "status": status
+        }
+        
+        if status == JobStatus.COMPLETED.value:
+            result_data = self.redis.get(f"job:{job_id}:result")
+            if result_data:
+                result["output"] = json.loads(result_data)
+        elif status == JobStatus.FAILED.value:
+            result["error"] = self.redis.get(f"job:{job_id}:error")
+        
+        return result
+
+queue = JobQueue()
+QUEUE_PY
+
+# CORE: Main API
+cat > core/main.py << 'CORE_MAIN'
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Dict, List, Optional
+import os
+
+from plugin_manager import plugin_manager, PluginType
+from job_queue import queue, JobStatus
+
+app = FastAPI(title="🏭 MEGAFACTORY CORE", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Lataa pluginit käynnistyksessä
+@app.on_event("startup")
+async def load_plugins():
+    manifests = plugin_manager.discover()
+    for manifest in manifests:
+        plugin_manager.load(manifest)
+
+@app.get("/")
+async def root():
+    return {
+        "factory": "megafactory",
+        "version": "1.0.0",
+        "plugins_loaded": len(plugin_manager.loaded_plugins),
+        "plugin_types": [t.value for t in PluginType]
+    }
+
+@app.get("/plugins")
+async def list_plugins():
+    """Listaa kaikki ladatut pluginit"""
+    return {
+        name: {
+            "version": manifest.version,
+            "type": manifest.type.value,
+            "limits": manifest.resource_limits
+        }
+        for name, manifest in plugin_manager.loaded_plugins.items()
+    }
+
+@app.post("/jobs/submit")
+async def submit_job(
+    plugin: str,
+    payload: Dict,
+    priority: int = 5,
+    background: BackgroundTasks = None
+):
+    """
+    Lähetä työ jonoon
+    
+    Example:
+    {
+        "plugin": "pipu_video",
+        "payload": {"image_url": "...", "mode": "story"},
+        "priority": 1
+    }
+    """
+    if plugin not in plugin_manager.loaded_plugins:
+        raise HTTPException(400, f"Plugin '{plugin}' ei ladattu")
+    
+    manifest = plugin_manager.loaded_plugins[plugin]
+    
+    job_id = queue.submit(
+        job_type=manifest.type.value,
+        plugin=plugin,
+        payload=payload,
+        priority=priority
+    )
+    
+    # Käynnistä worker taustalla jos ei jo käynnissä
+    if background:
+        background.add_task(process_job, job_id, manifest)
+    
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "plugin": plugin,
+        "queue_position": await get_queue_position(job_id, manifest.type.value)
+    }
+
+@app.get("/jobs/{job_id}")
+async def job_status(job_id: str):
+    """Hae työn status"""
+    status = queue.get_status(job_id)
+    if not status:
+        raise HTTPException(404, "Job not found")
+    return status
+
+async def get_queue_position(job_id: str, job_type: str) -> int:
+    """Laske sija jonossa"""
+    # Implementaatio riippuu Redis-rakenteesta
+    return 0  # Placeholder
+
+async def process_job(job_id: str, manifest):
+    """Prosessoi työ (worker)"""
+    # Tämä ajetaan erillisessä worker-prosessissa
+    pass
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+CORE_MAIN
+
+# ============================================================================
+# 2. PLUGIN: PIPU VIDEO (Laajennuspaketti)
+# ============================================================================
+
+mkdir -p plugins/pipu_video
+
+cat > plugins/pipu_video/manifest.json << 'PIPU_MANIFEST'
+{
+    "name": "pipu_video",
+    "version": "2.0.0",
+    "type": "video",
+    "entry_point": "engine",
+    "description": "Kuva videoksi + storytelling + endless loop",
+    "config_schema": {
+        "resolution": {"type": "string", "default": "1920x1080"},
+        "fps": {"type": "integer", "default": 24},
+        "default_duration": {"type": "integer", "default": 5}
+    },
+    "dependencies": ["cv2", "numpy", "PIL"],
+    "resource_limits": {
+        "cpu_cores": 2,
+        "ram_mb": 1024,
+        "gpu": false
+    }
+}
+PIPU_MANIFEST
+
+cat > plugins/pipu_video/engine.py << 'PIPU_ENGINE'
+"""
+🎬 PIPU VIDEO PLUGIN - Kuva videoksi
+"""
+import cv2
+import numpy as np
+from PIL import Image
+import io
+from typing import List, Dict, Optional
+from enum import Enum
+
+class StoryMode(Enum):
+    SIMPLE = "simple"
+    STORY = "story"
+    LOOP = "loop"
+    JAB = "jab"
+
+class PipuEngine:
+    def __init__(self, config: Dict):
+        self.resolution = tuple(map(int, config.get("resolution", "1920x1080").split("x")))
+        self.fps = config.get("fps", 24)
+        self.duration = config.get("default_duration", 5)
+    
+    def process(self, image_bytes: bytes, mode: str, **options) -> Dict:
+        """
+        Pääprosessointi
+        """
+        # Lataa kuva
+        img = Image.open(io.BytesIO(image_bytes))
+        img = img.convert('RGB').resize(self.resolution, Image.Resampling.LANCZOS)
+        img_array = np.array(img)
+        
+        # Valitse mode
+        mode_enum = StoryMode(mode)
+        
+        if mode_enum == StoryMode.SIMPLE:
+            frames = self._simple_mode(img_array)
+        elif mode_enum == StoryMode.STORY:
+            frames = self._story_mode(img_array)
+        elif mode_enum == StoryMode.LOOP:
+            frames = self._loop_mode(img_array, options.get("loop_count", 10))
+        elif mode_enum == StoryMode.JAB:
+            frames = self._jab_mode(img_array)
+        
+        # Renderöi video
+        output_path = options.get("output", f"/tmp/pipu_{mode}.mp4")
+        self._render_video(frames, output_path)
+        
+        return {
+            "output_path": output_path,
+            "frames": len(frames),
+            "duration": len(frames) / self.fps,
+            "mode": mode
+        }
+    
+    def _simple_mode(self, img: np.ndarray) -> List[np.ndarray]:
+        """Perus: kuva paikallaan"""
+        return [img] * (self.fps * self.duration)
+    
+    def _story_mode(self, img: np.ndarray) -> List[np.ndarray]:
+        """3-act rakenne"""
+        frames = []
+        total = self.fps * self.duration
+        act_frames = total // 3
+        
+        # Act 1: Zoom out
+        for i in range(act_frames):
+            t = i / act_frames
+            zoom = 1.3 - (0.3 * t)
+            frames.append(self._zoom(img, zoom))
+        
+        # Act 2: Hold
+        frames.extend([img] * act_frames)
+        
+        # Act 3: Zoom in
+        for i in range(act_frames):
+            t = i / act_frames
+            zoom = 1.0 + (0.3 * t)
+            frames.append(self._zoom(img, zoom))
+        
+        return frames
+    
+    def _loop_mode(self, img: np.ndarray, count: int) -> List[np.ndarray]:
+        """Endless loop (seamless)"""
+        loop_frames = self.fps * self.duration
+        frames = []
+        
+        for i in range(loop_frames):
+            t = i / loop_frames
+            zoom = 1.0 + 0.2 * np.sin(t * 2 * np.pi)
+            frames.append(self._zoom(img, zoom))
+        
+        # Toista
+        return frames * count
+    
+    def _jab_mode(self, img: np.ndarray) -> List[np.ndarray]:
+        """Nopea isku"""
+        frames = []
+        total = self.fps * self.duration
+        cycle = 15  # 0.5s
+        
+        for i in range(total):
+            phase = (i % cycle) / cycle
+            
+            if phase < 0.2:
+                zoom = 1.0 + phase * 2.5
+            elif phase < 0.6:
+                zoom = 1.5
+            else:
+                zoom = 1.5 - (phase - 0.6) * 2.5
+            
+            frames.append(self._zoom(img, zoom))
+        
+        return frames
+    
+    def _zoom(self, img: np.ndarray, zoom: float) -> np.ndarray:
+        h, w = img.shape[:2]
+        new_w, new_h = int(w / zoom), int(h / zoom)
+        x1, y1 = (w - new_w) // 2, (h - new_h) // 2
+        cropped = img[y1:y1+new_h, x1:x1+new_w]
+        return np.array(Image.fromarray(cropped).resize((w, h), Image.Resampling.LANCZOS))
+    
+    def _render_video(self, frames: List[np.ndarray], output: str):
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output, fourcc, self.fps, self.resolution)
+        
+        for frame in frames:
+            out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+        
+        out.release()
+
+def register(plugin_manager):
+    """Rekisteröi plugin"""
+    from core.plugin_manager import register_hook
+    
+    @register_hook("video.create")
+    def handle_video_create(**kwargs):
+        engine = PipuEngine(kwargs.get("config", {}))
+        return engine.process(
+            kwargs["image_bytes"],
+            kwargs.get("mode", "simple"),
+            **kwargs
+        )
+    
+    print("🎬 PIPU VIDEO plugin rekisteröity")
+PIPU_ENGINE
+
+# ============================================================================
+# 3. PLUGIN: SMART QUALITY (Toinen laajennus)
+# ============================================================================
+
+mkdir -p plugins/smart_quality
+
+cat > plugins/smart_quality/manifest.json << 'QUAL_MANIFEST'
+{
+    "name": "smart_quality",
+    "version": "3.0.0",
+    "type": "video",
+    "entry_point": "optimizer",
+    "description": "Älykäs pakkausoptimointi v3000",
+    "config_schema": {
+        "ssim_threshold": {"type": "float", "default": 0.96},
+        "max_iterations": {"type": "integer", "default": 8}
+    },
+    "dependencies": ["cv2", "numpy", "skimage"],
+    "resource_limits": {
+        "cpu_cores": 4,
+        "ram_mb": 2048
+    }
+}
+QUAL_MANIFEST
+
+cat > plugins/smart_quality/optimizer.py << 'OPTIMIZER_PY'
+"""
+📉 Smart Quality Optimizer v3000
+"""
+import cv2
+import numpy as np
+from typing import Dict, Optional
+from enum import Enum
+import subprocess
+
+class QualityMode(Enum):
+    EDGE = "edge"           # Nopea preview
+    INTELLIGENT = "intelligent"  # Optimaalinen
+    WARP = "warp"           # Maksimi laatu
+
+class SmartQualityOptimizer:
+    def __init__(self, config: Dict):
+        self.ssim_threshold = config.get("ssim_threshold", 0.96)
+        self.max_iterations = config.get("max_iterations", 8)
+    
+    def optimize(self, 
+                 input_path: str,
+                 output_path: str,
+                 mode: QualityMode,
+                 target_size_kb: Optional[int] = None) -> Dict:
+        
+        presets = {
+            QualityMode.EDGE: ("ultrafast", "28", "libx264"),
+            QualityMode.INTELLIGENT: ("medium", "23", "libx264"),
+            QualityMode.WARP: ("slow", "18", "libx265")
+        }
+        
+        preset, crf, codec = presets[mode]
+        
+        cmd = [
+            'ffmpeg', '-y', '-i', input_path,
+            '-c:v', codec,
+            '-preset', preset,
+            '-crf', crf,
+            '-movflags', '+faststart',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            output_path
+        ]
+        
+        subprocess.run(cmd, capture_output=True)
+        
+        return {
+            "mode": mode.value,
+            "codec": codec,
+            "preset": preset,
+            "crf": crf,
+            "output_path": output_path
+        }
+
+def register(plugin_manager):
+    @plugin_manager.register_hook("video.optimize")
+    def handle_optimize(**kwargs):
+        optimizer = SmartQualityOptimizer(kwargs.get("config", {}))
+        return optimizer.optimize(
+            kwargs["input_path"],
+            kwargs["output_path"],
+            QualityMode(kwargs.get("mode", "intelligent")),
+            kwargs.get("target_size_kb")
+        )
+OPTIMIZER_PY
+
+# ============================================================================
+# 4. DOCKER-COMPOSE (Skaalautuva deployment)
+# ============================================================================
+
+cat > docker-compose.yml << 'COMPOSE'
+version: '3.8'
+
+services:
+  # 🏭 CORE (API + Plugin Manager)
+  core:
+    build: ./core
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./plugins:/app/plugins  # Mount pluginit
+      - shared-storage:/tmp/media
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PLUGIN_DIR=/app/plugins
+    depends_on:
+      - redis
+  
+  # 📋 Redis (Job Queue)
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+  
+  # 🎬 VIDEO WORKER (Heavy lifting)
+  video-worker:
+    build: ./plugins/pipu_video
+    volumes:
+      - ./plugins:/app/plugins
+      - shared-storage:/tmp/media
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - WORKER_TYPE=video
+    deploy:
+      replicas: 2  # Skaalaa tarpeen mukaan
+  
+  # 📉 QUALITY WORKER
+  quality-worker:
+    build: ./plugins/smart_quality
+    volumes:
+      - ./plugins:/app/plugins
+      - shared-storage:/tmp/media
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - WORKER_TYPE=quality
+
+volumes:
+  shared-storage:
+  redis-data:
+COMPOSE
+
+# ============================================================================
+# 5. ASENNUSOHJEET
+# ============================================================================
+
+cat > README.md << 'README'
+
+
+
