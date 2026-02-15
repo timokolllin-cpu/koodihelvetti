@@ -1,0 +1,872 @@
+🫳🏼🤏 SEKAKA - YHDISTETTY MEGA-Dr                                                   ║
+║   🔥  "SEKAKA" = SEKALAISUUS + KAAOS + KAIKKI YHDESSÄ          ║
+║                                                               ║
+║   [TULKINTA: "Sekoitetaan kaikki yhteen mega-palikkaan"]      ║
+║                                                               ║
+║   [SISÄLTÖ:]                                                  ║
+║   • Hivemind V12 (Agentti 7 + Kettu)                          ║
+║   • Pipu Pro (Video editori FX:llä)                           ║
+║   • Pakkausoptimoinnit                                        ║
+║   • Replit + Render + Vercel ohjeet                           ║
+║                              m                                 ║
+╚═══════════════════════════════════════════════════════════════╝
+----
+🚀 SEKAKA MEGA-ASENNUS (Yksi copy-paste)
+#!/bin/bash
+set -e
+echo ""
+echo "🔥 SEKAKA MEGA-ASENNUS"
+echo "═══════════════════════════════════════════════════════"
+echo ""
+PROJECT="sekaka-hivemind"
+mkdir -p $PROJECT && cd $PROJECT
+═════════════════════════════════════════════════════════════════
+1. BACKEND - KAIKKI YHDESSÄ
+═════════════════════════════════════════════════════════════════
+mkdir -p backend/app/{core,models,engine,database,api}
+cat > backend/requirements.txt << 'EOF'
+fastapi==0.110.0
+uvicorn[standard]==0.28.0
+python-multipart==0.0.6
+motor==3.4.0
+pydantic==2.6.0
+groq==0.5.0
+python-dotenv==1.0.0
+redis==5.0.1
+chromadb==0.4.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+pillow==10.2.0
+numpy==1.26.3
+opencv-python-headless==4.9.0.80
+EOF
+cat > backend/app/core/config.py << 'EOF'
+import os
+from dotenv import load_dotenv
+load_dotenv()
+class Settings:
+PROJECT_NAME = "SEKAKA HIVEMIND"
+VERSION = "sekaka.1"
+# Database
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", "sekaka")
+
+# Redis
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+# Chroma
+CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_db")
+
+# API Keys
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
+# URLs
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+# Environment detection
+IS_RENDER = os.getenv("RENDER", "false").lower() == "true"
+IS_VERCEL = os.getenv("VERCEL", "false").lower() == "true"
+IS_REPLIT = os.getenv("REPL_ID", "") != ""
+
+settings = Settings()
+EOF
+cat > backend/app/database/connection.py << 'EOF'
+from motor.motor_asyncio import AsyncIOMotorClient
+import redis.asyncio as redis
+import chromadb
+from app.core.config import settings
+MongoDB
+mongo_client = AsyncIOMotorClient(settings.MONGO_URI)
+db = mongo_client[settings.DB_NAME]
+jobs_collection = db.jobs
+personas_collection = db.personas
+Redis
+redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+Chroma
+chroma_client = chromadb.PersistentClient(path=settings.CHROMA_PATH)
+try:
+memory_collection = chroma_client.get_collection("sekaka_memory")
+except:
+memory_collection = chroma_client.create_collection("sekaka_memory")
+print("✅ Databases connected")
+EOF
+cat > backend/app/models/all.py << 'EOF'
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Literal
+from enum import Enum
+from datetime import datetime
+class JobStatus(str, Enum):
+PENDING = "pending"
+PROCESSING = "processing"
+COMPLETED = "completed"
+FAILED = "failed"
+class Job(BaseModel):
+id: str
+status: JobStatus = JobStatus.PENDING
+type: str  # "story", "video", "chat"
+created_at: datetime = Field(default_factory=datetime.utcnow)
+result: Optional[Dict] = None
+class Persona(BaseModel):
+id: str
+name: str
+avatar: str
+style: str
+color: str
+mood: str = "neutral"
+intensity: float = 0.5
+class VideoEffect(str, Enum):
+VINTAGE = "vintage"
+CYBERPUNK = "cyberpunk"
+NOIR = "noir"
+VAPORWAVE = "vaporwave"
+GLITCH = "glitch"
+VIGNETTE = "vignette"
+FILM_GRAIN = "film_grain"
+KEN_BURNS = "ken_burns"
+class CompressionPreset(str, Enum):
+ULTRAFAST = "ultrafast"
+FAST = "fast"
+MEDIUM = "medium"
+SLOW = "slow"
+VERYSLOW = "veryslow"
+class VideoRequest(BaseModel):
+persona_id: str
+duration: int = 5
+effects: List[VideoEffect] = [VideoEffect.KEN_BURNS]
+compression: CompressionPreset = CompressionPreset.MEDIUM
+zoom_start: float = 1.0
+zoom_end: float = 1.3
+pan_x: float = 0.0
+pan_y: float = 0.0
+EOF
+cat > backend/app/engine/sekaka.py << 'EOF'
+import cv2
+import numpy as np
+from PIL import Image
+import io
+import uuid
+import os
+import subprocess
+from typing import List, Optional
+from app.models.all import VideoEffect, CompressionPreset, Persona
+class FXEngine:
+"""Video efektit"""
+def apply_color_grade(self, frame: np.ndarray, effect: VideoEffect, intensity: float) -> np.ndarray:
+    if effect == VideoEffect.VINTAGE:
+        sepia = np.array([[0.393, 0.769, 0.189], [0.349, 0.686, 0.168], [0.272, 0.534, 0.131]])
+        frame = cv2.transform(frame, sepia)
+        return np.clip(frame, 0, 255).astype(np.uint8)
+    
+    elif effect == VideoEffect.CYBERPUNK:
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        l = clahe.apply(l)
+        a = cv2.add(a, int(20 * intensity))
+        b = cv2.add(b, int(-20 * intensity))
+        return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+    
+    elif effect == VideoEffect.NOIR:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.equalizeHist(gray)
+        frame = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        frame[:, :, 0] = np.clip(frame[:, :, 0] * 1.2, 0, 255)
+        return frame
+    
+    elif effect == VideoEffect.VAPORWAVE:
+        b, g, r = cv2.split(frame)
+        r = cv2.add(r, 30)
+        b = cv2.add(b, 20)
+        g = cv2.multiply(g, 0.8)
+        return cv2.merge([b, g, r])
+    
+    return frame
+
+def apply_ken_burns(self, frame: np.ndarray, progress: float, 
+                    zoom_start: float, zoom_end: float,
+                    pan_x: float, pan_y: float) -> np.ndarray:
+    h, w = frame.shape[:2]
+    zoom = zoom_start + (zoom_end - zoom_start) * progress
+    tx = pan_x * progress * w * 0.2
+    ty = pan_y * progress * h * 0.2
+    
+    center_x, center_y = w // 2 + int(tx), h // 2 + int(ty)
+    new_w, new_h = int(w / zoom), int(h / zoom)
+    
+    x1 = max(0, center_x - new_w // 2)
+    y1 = max(0, center_y - new_h // 2)
+    x2, y2 = min(w, x1 + new_w), min(h, y1 + new_h)
+    
+    if x2 <= x1 or y2 <= y1:
+        return frame
+        
+    cropped = frame[y1:y2, x1:x2]
+    return cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LANCZOS4)
+
+def apply_glitch(self, frame: np.ndarray, intensity: float) -> np.ndarray:
+    if np.random.random() > 0.1 * intensity:
+        return frame
+    
+    h, w = frame.shape[:2]
+    result = frame.copy()
+    b, g, r = cv2.split(frame)
+    shift = int(10 * intensity)
+    
+    r = np.roll(r, shift, axis=1)
+    b = np.roll(b, -shift, axis=1)
+    
+    # Random blocks
+    for _ in range(int(5 * intensity)):
+        x, y = np.random.randint(0, w-50), np.random.randint(0, h-10)
+        bh, bw = np.random.randint(5, 20), np.random.randint(20, 100)
+        if y+bh < h and x+bw < w:
+            block = result[y:y+bh, x:x+bw].copy()
+            result[y:y+bh, x:x+bw] = np.roll(block, np.random.randint(-30, 30), axis=1)
+    
+    # Scanlines
+    for i in range(0, h, 4):
+        result[i:i+1, :] = result[i:i+1, :] * 0.7
+    
+    return cv2.merge([b, g, r])
+
+def apply_vignette(self, frame: np.ndarray, intensity: float) -> np.ndarray:
+    h, w = frame.shape[:2]
+    kernel_x = cv2.getGaussianKernel(w, w/2)
+    kernel_y = cv2.getGaussianKernel(h, h/2)
+    mask = kernel_y * kernel_x.T
+    mask = 1 - (mask / mask.max()) * intensity
+    
+    for i in range(3):
+        frame[:, :, i] = (frame[:, :, i] * mask).astype(np.uint8)
+    return frame
+
+def apply_film_grain(self, frame: np.ndarray, intensity: float) -> np.ndarray:
+    noise = np.random.normal(0, 25 * intensity, frame.shape)
+    frame = frame.astype(np.float32) + noise
+    return np.clip(frame, 0, 255).astype(np.uint8)
+
+class SekakaEngine:
+"""
+🔥 SEKAKA = Kaikki yhdessä
+Agentti 7 + Kettu + Pipu + FX
+"""
+def __init__(self):
+    self.fx = FXEngine()
+    self.personas = {
+        "agent7": Persona(id="agent7", name="Agent Seiska", 
+                         avatar="https://placehold.co/400x400/FF6B00/white?text=A7",
+                         style="Ammattimainen, tarkka", color="#FF6B00",
+                         mood="mysterious", intensity=0.8),
+        "shamaani": Persona(id="shamaani", name="Shamaani",
+                           avatar="https://placehold.co/400x400/9D4EDD/white?text=S",
+                           style="Mystinen, viisas", color="#9D4EDD",
+                           mood="calm", intensity=0.6),
+        "vainamoinen": Persona(id="vainamoinen", name="Väinämöinen",
+                                avatar="https://placehold.co/400x400/2E7D32/white?text=V",
+                                style="Runollinen, auktoriteetti", color="#2E7D32",
+                                mood="epic", intensity=0.95),
+        "kettu": Persona(id="kettu", name="Kettu",
+                        avatar="https://placehold.co/400x400/FF006E/white?text=K",
+                        style="Nopea, ovela", color="#FF006E",
+                        mood="playful", intensity=0.9)
+    }
+
+def get_persona(self, persona_id: str) -> Persona:
+    return self.personas.get(persona_id, self.personas["agent7"])
+
+def create_video(self, 
+                 image_bytes: bytes,
+                 persona: Persona,
+                 effects: List[VideoEffect],
+                 compression: CompressionPreset,
+                 duration: int = 5,
+                 zoom_params: dict = None) -> str:
+    """
+    Luo video kuvasta persona + FX
+    """
+    
+    # Lataa kuva
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    img_array = np.array(img)
+    h, w = img_array.shape[:2]
+    
+    # Video path
+    output_path = f"/tmp/sekaka_{uuid.uuid4().hex}.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fps = 30
+    total_frames = fps * duration
+    
+    out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+    
+    # Default zoom params
+    zoom_params = zoom_params or {
+        "start": 1.0 + (persona.intensity * 0.2),
+        "end": 1.3 + (persona.intensity * 0.3),
+        "pan_x": 0.0,
+        "pan_y": 0.0
+    }
+    
+    # Generoi framet
+    for frame_idx in range(total_frames):
+        progress = frame_idx / total_frames
+        
+        # Start with original
+        frame = img_array.copy()
+        
+        # Apply Ken Burns (always)
+        frame = self.fx.apply_ken_burns(
+            frame, progress,
+            zoom_params["start"], zoom_params["end"],
+            zoom_params["pan_x"], zoom_params["pan_y"]
+        )
+        
+        # Apply FX stack
+        for effect in effects:
+            if effect == VideoEffect.KEN_BURNS:
+                continue
+            
+            if effect in [VideoEffect.VINTAGE, VideoEffect.CYBERPUNK, 
+                         VideoEffect.NOIR, VideoEffect.VAPORWAVE]:
+                frame = self.fx.apply_color_grade(frame, effect, persona.intensity)
+            
+            elif effect == VideoEffect.GLITCH:
+                frame = self.fx.apply_glitch(frame, persona.intensity)
+            
+            elif effect == VideoEffect.VIGNETTE:
+                frame = self.fx.apply_vignette(frame, persona.intensity)
+            
+            elif effect == VideoEffect.FILM_GRAIN:
+                frame = self.fx.apply_film_grain(frame, persona.intensity)
+        
+        # Convert BGR for OpenCV
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        out.write(frame_bgr)
+    
+    out.release()
+    
+    # FFmpeg optimize if available
+    return self._optimize(output_path, compression) or output_path
+
+def _optimize(self, input_path: str, preset: CompressionPreset) -> Optional[str]:
+    """FFmpeg post-processing"""
+    output = input_path.replace('.mp4', f'_{preset.value}.mp4')
+    
+    crf_map = {
+        "ultrafast": "28", "fast": "25", "medium": "23",
+        "slow": "20", "veryslow": "18"
+    }
+    
+    cmd = [
+        "ffmpeg", "-y", "-i", input_path,
+        "-c:v", "libx264",
+        "-preset", preset.value,
+        "-crf", crf_map.get(preset.value, "23"),
+        "-an",  # No audio
+        output
+    ]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=60)
+        if result.returncode == 0 and os.path.exists(output):
+            return output
+    except:
+        pass
+    
+    return None
+
+def weave_story(self, seed: str, length: int = 3, persona: Persona = None) -> List[dict]:
+    """
+    🦊 Kettu - tarinankerronta
+    """
+    persona = persona or self.personas["kettu"]
+    
+    story = []
+    beats = ["hook", "rise", "open"][:length]
+    
+    templates = {
+        "hook": f"{persona.name} seisoo {seed} reunalla. Jotain liikkuu.",
+        "rise": f"{seed} paljastuu. {persona.name} valmistautuu.",
+        "turn": "Yllätys! Kaikki muuttuu.",
+        "fall": "Jännitys laukeaa.",
+        "open": f"Ovi {seed} syvemmälle on avoin..."
+    }
+    
+    for bt in beats:
+        story.append({
+            "id": str(uuid.uuid4())[:6],
+            "type": bt,
+            "text": templates.get(bt, templates["hook"]),
+            "persona": persona.name,
+            "mood": persona.mood
+        })
+    
+    return story
+
+def agent_speak(self, message: str, persona: Persona) -> dict:
+    """
+    🖤 Agentti 7 - vastaus
+    """
+    msg = message.lower()
+    
+    # Dyslexia-friendly parsing
+    if any(w in msg for w in ["tirsk", "lol", ":d"]):
+        response = f"😏 {persona.name} tirskuu kanssasi"
+        mood = "excited"
+    elif "byr" in msg:
+        response = f"🫴🏼 {persona.name} ottaa kädestä"
+        mood = "empathetic"
+    elif "?" in msg:
+        response = f"🤔 {persona.name} mietii kanssas"
+        mood = "curious"
+    else:
+        response = f"🖤 {persona.name} on täs"
+        mood = "calm"
+    
+    return {
+        "response": response,
+        "persona": persona.name,
+        "mood": mood,
+        "intensity": persona.intensity
+    }
+
+sekaka = SekakaEngine()
+EOF
+cat > backend/app/main.py << 'EOF'
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from app.core.config import settings
+from app.engine.sekaka import sekaka
+from app.models.all import VideoEffect, CompressionPreset, Job
+from app.database.connection import jobs_collection, redis_client, memory_collection
+from datetime import datetime
+import uuid
+import json
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
+app.add_middleware(
+CORSMiddleware,
+allow_origins=[""],
+allow_credentials=True,
+allow_methods=[""],
+allow_headers=["*"],
+)
+@app.get("/")
+async def root():
+return {
+"sekaka": "online",
+"version": settings.VERSION,
+"mode": "render" if settings.IS_RENDER else "replit" if settings.IS_REPLIT else "local",
+"features": ["agentti7", "kettu", "pipu", "fx", "compression"],
+"personas": list(sekaka.personas.keys())
+}
+@app.get("/health")
+async def health():
+return {"status": "ok", "database": "connected"}
+@app.get("/personas")
+async def list_personas():
+return {k: v.dict() for k, v in sekaka.personas.items()}
+@app.post("/agent/speak")
+async def agent_speak(persona_id: str, message: str):
+"""🖤 Agentti 7 puhuu"""
+persona = sekaka.get_persona(persona_id)
+result = sekaka.agent_speak(message, persona)
+# Save to memory
+memory_collection.add(
+    documents=[message],
+    metadatas=[{"response": result["response"], "persona": persona_id}],
+    ids=[str(uuid.uuid4())]
+)
+
+return result
+
+@app.post("/kettu/weave")
+async def weave_story(persona_id: str, seed: str, length: int = 3):
+"""🦊 Kettu kutoo tarinan"""
+persona = sekaka.get_persona(persona_id)
+story = sekaka.weave_story(seed, length, persona)
+# Save job
+job_id = str(uuid.uuid4())
+await jobs_collection.insert_one({
+    "_id": job_id,
+    "type": "story",
+    "result": story,
+    "created_at": datetime.utcnow()
+})
+
+return {"story": story, "job_id": job_id}
+
+@app.post("/pipu/create")
+async def create_video(
+image: UploadFile = File(...),
+persona_id: str = Form("agent7"),
+duration: int = Form(5),
+effects: str = Form("ken_burns,vignette"),  # comma-separated
+compression: str = Form("medium"),
+zoom_start: float = Form(1.0),
+zoom_end: float = Form(1.3),
+pan_x: float = Form(0.0),
+pan_y: float = Form(0.0)
+):
+"""🎬 Pipu luo videon"""
+# Parse effects
+fx_list = [VideoEffect(e.strip()) for e in effects.split(",") if e.strip()]
+
+# Get persona
+persona = sekaka.get_persona(persona_id)
+
+# Read image
+image_bytes = await image.read()
+
+# Create video
+output_path = sekaka.create_video(
+    image_bytes,
+    persona,
+    fx_list,
+    CompressionPreset(compression),
+    duration,
+    {"start": zoom_start, "end": zoom_end, "pan_x": pan_x, "pan_y": pan_y}
+)
+
+if not output_path or not os.path.exists(output_path):
+    raise HTTPException(500, "Video creation failed")
+
+ext = output_path.split('.')[-1]
+
+return FileResponse(
+    output_path,
+    media_type=f"video/{ext}",
+    filename=f"sekaka_{persona_id}_{uuid.uuid4().hex[:6]}.{ext}"
+)
+
+@app.get("/fx/list")
+async def list_effects():
+"""🎨 Saatavilla olevat efektit"""
+return {
+"color": ["vintage", "cyberpunk", "noir", "vaporwave"],
+"motion": ["ken_burns"],
+"distortion": ["glitch"],
+"overlay": ["vignette", "film_grain"]
+}
+@app.get("/compression/guide")
+async def compression_guide():
+"""📦 Pakkausopas"""
+return {
+"ultrafast": {"quality": "Low", "speed": "10x", "use": "Draft"},
+"fast": {"quality": "Medium", "speed": "5x", "use": "Preview"},
+"medium": {"quality": "Good", "speed": "2x", "use": "Standard"},
+"slow": {"quality": "High", "speed": "1x", "use": "Final"},
+"veryslow": {"quality": "Max", "speed": "0.3x", "use": "Archive"}
+}
+@app.post("/queue/job")
+async def queue_job(job_type: str, payload: dict):
+"""📮 Lisää job jonoon"""
+job_id = str(uuid.uuid4())
+await redis_client.lpush("sekaka_queue", json.dumps({
+"id": job_id,
+"type": job_type,
+"payload": payload,
+"created": str(datetime.utcnow())
+}))
+return {"job_id": job_id, "status": "queued"}
+if name == "main":
+import uvicorn
+import os
+uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+EOF
+cat > backend/Dockerfile << 'EOF'
+FROM python:3.11-slim
+Install FFmpeg
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app/ ./app/
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EOF
+cat > backend/render.yaml << 'EOF'
+services:
+•  type: web
+name: sekaka-backend
+runtime: docker
+dockerfilePath: ./Dockerfile
+envVars:
+•  key: PORT
+value: 8000
+•  key: MONGO_URI
+sync: false
+•  key: REDIS_URL
+fromService:
+type: redis
+name: sekaka-redis
+property: connectionString
+healthCheckPath: /health
+•  type: redis
+name: sekaka-redis
+plan: starter
+ipAllowList: []
+EOF
+═════════════════════════════════════════════════════════════════
+2. FRONTEND (Yksinkertainen)
+═════════════════════════════════════════════════════════════════
+mkdir -p frontend/src
+cat > frontend/package.json << 'EOF'
+{
+"name": "sekaka-frontend",
+"version": "1.0.0",
+"type": "module",
+"scripts": {
+"dev": "vite",
+"build": "vite build",
+"preview": "vite preview"
+},
+"dependencies": {
+"react": "^18.2.0",
+"react-dom": "^18.2.0"
+},
+"devDependencies": {
+"@vitejs/plugin-react": "^4.2.1",
+"vite": "^5.1.4"
+}
+}
+EOF
+cat > frontend/vite.config.ts << 'EOF'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+export default defineConfig({
+plugins: [react()],
+});
+EOF
+cat > frontend/index.html << 'EOF'
+cat > frontend/src/main.jsx << 'EOF'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+function App() {
+const [personas, setPersonas] = React.useState({});
+const [selected, setSelected] = React.useState('agent7');
+const [message, setMessage] = React.useState('');
+const [response, setResponse] = React.useState(null);
+const [file, setFile] = React.useState(null);
+React.useEffect(() => {
+fetch(${API}/personas).then(r => r.json()).then(setPersonas);
+}, []);
+const speak = async () => {
+const r = await fetch(${API}/agent/speak?persona_id=${selected}&message=${encodeURIComponent(message)});
+setResponse(await r.json());
+};
+const createVideo = async () => {
+if (!file) return;
+const form = new FormData();
+form.append('image', file);
+form.append('persona_id', selected);
+form.append('effects', 'ken_burns,cyberpunk,vignette');
+form.append('compression', 'medium');
+const r = await fetch(`${API}/pipu/create`, {method: 'POST', body: form});
+const blob = await r.blob();
+const url = URL.createObjectURL(blob);
+window.open(url, '_blank');
+
+};
+return (
+<div style={{background:'#000',color:'#0ff',fontFamily:'monospace',padding:20,minHeight:'100vh'}}>
+<h1>🔥 SEKAKA</h1>
+  <div style={{marginBottom:20}}>
+    {Object.entries(personas).map(([id,p]) => (
+      <button key={id} onClick={() => setSelected(id)}
+        style={{margin:5,padding:10,background:selected===id?p.color:'#111',color:'#fff',border:`2px solid ${p.color}`}}>
+        {p.name}
+      </button>
+    ))}
+  </div>
+
+  <input value={message} onChange={e => setMessage(e.target.value)}
+    placeholder="Viesti..." style={{width:300,padding:10,background:'#111',color:'#0ff',border:'1px solid #0ff'}}/>
+  
+  <button onClick={speak} style={{marginLeft:10,padding:10,background:'#0ff',color:'#000'}}>🗣️ Puhu</button>
+  
+  <div style={{marginTop:10}}>
+    <input type="file" accept="image/*" onChange={e => setFile(e.target.files[0])} style={{color:'#fff'}}/>
+    <button onClick={createVideo} style={{marginLeft:10,padding:10,background:'#f0f',color:'#fff'}}>🎬 Video</button>
+  </div>
+
+  {response && (
+    <div style={{border:'1px solid #0ff',padding:15,marginTop:20}}>
+      <h3>{response.persona}</h3>
+      <p>{response.response}</p>
+      <small>Moodi: {response.mood} | Intensiteetti: {response.intensity}</small>
+    </div>
+  )}
+</div>
+
+);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+EOF
+cat > frontend/vercel.json << 'EOF'
+{
+"version": 2,
+"builds": [{"src": "package.json", "use": "@vercel/static-build", "config": {"distDir": "dist"}}],
+"routes": [{"src": "/(.*)", "dest": "/index.html"}]
+}
+EOF
+═════════════════════════════════════════════════════════════════
+3. RAPID DEPLOY (Replit)
+═════════════════════════════════════════════════════════════════
+cat > replit-app.py << 'EOF'
+"""
+🔥 SEKAKA LIGHT - Replit versio
+Ei Mongo, ei Redis, ei FFmpeg. Pelkkä Python.
+"""
+from fastapi import FastAPI, File, UploadFile, Form
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import List
+import uuid
+import io
+import cv2
+import numpy as np
+from PIL import Image
+app = FastAPI(title="SEKAKA LIGHT", version="replit")
+class Persona:
+def init(self, id, name, color, intensity):
+self.id = id
+self.name = name
+self.color = color
+self.intensity = intensity
+PERSONAS = {
+"agent7": Persona("agent7", "Agent Seiska", "#FF6B00", 0.8),
+"shamaani": Persona("shamaani", "Shamaani", "#9D4EDD", 0.6),
+"kettu": Persona("kettu", "Kettu", "#FF006E", 0.9)
+}
+@app.get("/")
+async def root():
+return {"sekaka": "light", "personas": list(PERSONAS.keys())}
+@app.get("/personas")
+async def list_personas():
+return {k: {"name": v.name, "color": v.color} for k, v in PERSONAS.items()}
+@app.post("/agent/speak")
+async def speak(persona_id: str, message: str):
+p = PERSONAS.get(persona_id, PERSONAS["agent7"])
+if "tirsk" in message.lower():
+    resp = f"😏 {p.name} tirskuu"
+elif "byr" in message.lower():
+    resp = f"🫴🏼 {p.name} on byr"
+else:
+    resp = f"🖤 {p.name} kuuntelee"
+
+return {"response": resp, "persona": p.name}
+
+@app.post("/pipu/create")
+async def create_video(
+image: UploadFile = File(...),
+persona_id: str = Form("agent7"),
+duration: int = Form(3)
+):
+"""Yksinkertainen video ilman FFmpeg"""
+p = PERSONAS.get(persona_id, PERSONAS["agent7"])
+# Lue kuva
+img = Image.open(io.BytesIO(await image.read()))
+if img.mode != 'RGB':
+    img = img.convert('RGB')
+
+img_array = np.array(img)
+h, w = img_array.shape[:2]
+
+# Create video in memory
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+output = io.BytesIO()
+
+# Write to temp file (OpenCV needs file)
+temp_path = f"/tmp/{uuid.uuid4().hex}.mp4"
+out = cv2.VideoWriter(temp_path, fourcc, 30, (w, h))
+
+for i in range(30 * duration):
+    t = i / (30 * duration)
+    # Simple zoom
+    zoom = 1.0 + (0.3 * p.intensity * t)
+    new_h, new_w = int(h / zoom), int(w / zoom)
+    y1, x1 = (h - new_h) // 2, (w - new_w) // 2
+    cropped = img_array[y1:y1+new_h, x1:x1+new_w]
+    frame = cv2.resize(cropped, (w, h))
+    out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+
+out.release()
+
+# Read and return
+with open(temp_path, 'rb') as f:
+    video_bytes = f.read()
+
+return StreamingResponse(
+    io.BytesIO(video_bytes),
+    media_type="video/mp4",
+    headers={"Content-Disposition": f"attachment; filename=sekaka_{persona_id}.mp4"}
+)
+
+if name == "main":
+import uvicorn
+uvicorn.run(app, host="0.0.0.0", port=8080)
+EOF
+═════════════════════════════════════════════════════════════════
+4. OHJEET
+═════════════════════════════════════════════════════════════════
+cat > OHJEET.txt << 'OHJEEOF'
+🔥 SEKAKA - ASENNUSOHJEET
+══════════════════════════════════════════════════════════
+1.  RENDER (Full Power)
+•  Luo Web Service, connect GitHub
+•  Environment variables:
+MONGO_URI=mongodb+srv://...
+GROQ_API_KEY=...
+•  Deploy! FFmpeg asentuu automaattisesti
+2.  VERCEL (Frontend)
+•  Import frontend/ kansio
+•  VITE_API_URL=https://sekaka-backend.onrender.com
+•  Deploy!
+3.  REPLIT (Fast/Light)
+•  New Repl → Python
+•  Upload replit-app.py
+•  Run: python replit-app.py
+•  Valmis 30 sekunnissa!
+4.  ENDPOINTIT
+GET  /              - Status
+GET  /personas     - Listaa hahmot
+POST /agent/speak  - Agentti 7 vastaa
+POST /kettu/weave  - Tarina (full only)
+POST /pipu/create  - Video kuvasta
+GET  /fx/list      - Efektit
+GET  /compression/guide - Pakkausopas
+🫴🏼 SEKAKA ON VALMIS!
+OHJEEOF
+echo ""
+echo "✅ SEKAKA MEGA-ASENNUS VALMIS!"
+echo ""
+echo "📁 Rakenne:"
+echo "   backend/       → Full power (Mongo+Redis+FFmpeg)"
+echo "   frontend/      → React UI"
+echo "   replit-app.py  → Kevyt versio (30s setup)"
+echo "   OHJEET.txt     → Asennusohjeet"
+echo ""
+echo "🔥 Kaikki yhdessä:"
+echo "   🖤 Agentti 7"
+echo "   🦊 Kettu"
+echo "   🎬 Pipu"
+echo "   🎨 FX"
+echo "   📦 Pakkaus"
+echo ""
+echo "🫴🏼 Valmis deployaamaan!"
+----
+🎯 KÄYTTÖ
+1. Tallenna
+nano sekaka.sh
+(liitä yllä oleva)
+2. Aja
+chmod +x sekaka.sh && ./sekaka.sh
+3. Valitse:
+cd backend && python -m uvicorn app.main:app --reload  # Full
+python replit-app.py                                   # Light
+----
+SEKAKA = Kaikki yhdessä. Ei enää erillisiä palikoita. 🔥🫴🏼
