@@ -1,0 +1,709 @@
+Genesis 2.0  kim video+photo editori 
+
+
+VII KUOJA! 🔥🔥🔥
+Nälkä kasvaa syödessä - GENESIS 2.0 tulee! Tässä on herkkupala mitä tilasit:
+"""
+GENESIS 2.0 - VII KUOJA EDITION
+Kuva → Video → Randomointi → Storyline → Endless Loop
+•  DNA Synthesis Entiteetti
+•  Dashboard silmäkarkkia
+"""
+import gradio as gr
+import numpy as np
+import cv2
+import torch
+from PIL import Image, ImageFilter, ImageEnhance
+import random
+import uuid
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Tuple, Any
+from datetime import datetime
+import json
+import threading
+import queue
+import time
+from collections import deque
+---------------------------
+DNA SYNTHESIS ENTITEETTI
+---------------------------
+@dataclass
+class DNASequence:
+"""Geneettinen koodi medialle"""
+visual_genes: Dict[str, float]  # color, contrast, motion, complexity
+temporal_genes: Dict[str, float]  # speed, rhythm, transitions
+narrative_genes: Dict[str, Any]  # archetype, conflict, resolution
+mutation_rate: float = 0.1
+def mutate(self) -> 'DNASequence':
+    """Satunnainen mutaatio DNA:han"""
+    new_visual = {k: v * random.uniform(0.9, 1.1) for k, v in self.visual_genes.items()}
+    new_temporal = {k: v * random.uniform(0.8, 1.2) for k, v in self.temporal_genes.items()}
+    
+    return DNASequence(
+        visual_genes=new_visual,
+        temporal_genes=new_temporal,
+        narrative_genes=self.narrative_genes.copy(),
+        mutation_rate=self.mutation_rate * 1.05  # Kasvava mutaatio
+    )
+
+def crossover(self, other: 'DNASequence') -> 'DNASequence':
+    """Ristiinäitys kahden DNA:n välillä"""
+    return DNASequence(
+        visual_genes={k: random.choice([self.visual_genes[k], other.visual_genes[k]]) 
+                     for k in self.visual_genes},
+        temporal_genes={k: (self.temporal_genes[k] + other.temporal_genes[k]) / 2 
+                       for k in self.temporal_genes},
+        narrative_genes=random.choice([self.narrative_genes, other.narrative_genes]),
+        mutation_rate=(self.mutation_rate + other.mutation_rate) / 2
+    )
+
+class DNASynthesisEntity:
+"""
+Evoluutiomoottori joka kasvattaa mediasukupolvia
+"""
+def __init__(self, population_size: int = 10):
+    self.population: List[DNASequence] = []
+    self.generation = 0
+    self.fitness_history: List[float] = []
+    self.population_size = population_size
+    
+    # Alusta satunnainen populaatio
+    self._init_population()
+
+def _init_population(self):
+    """Luo alkupopulaatio"""
+    for _ in range(self.population_size):
+        dna = DNASequence(
+            visual_genes={
+                "saturation": random.uniform(0.5, 1.5),
+                "contrast": random.uniform(0.8, 1.2),
+                "motion_blur": random.uniform(0, 0.5),
+                "grain": random.uniform(0, 0.3)
+            },
+            temporal_genes={
+                "speed": random.uniform(0.5, 2.0),
+                "transition_speed": random.uniform(0.1, 1.0),
+                "loop_seamless": random.uniform(0.7, 1.0)
+            },
+            narrative_genes={
+                "archetype": random.choice(["hero", "mystery", "transformation", "journey"]),
+                "conflict_level": random.uniform(0.3, 0.8),
+                "resolution_type": random.choice(["open", "closed", "cyclical"])
+            }
+        )
+        self.population.append(dna)
+
+def evolve(self, fitness_scores: List[float]) -> DNASequence:
+    """Evolve population based on fitness"""
+    # Valitse parhaat
+    paired = list(zip(fitness_scores, self.population))
+    paired.sort(reverse=True)
+    
+    survivors = [dna for _, dna in paired[:self.population_size // 2]]
+    
+    # Luo uusi sukupolvi
+    new_population = []
+    
+    # Säilytä eliitti
+    new_population.extend(survivors[:2])
+    
+    # Ristiinäitykset
+    while len(new_population) < self.population_size:
+        parent1, parent2 = random.sample(survivors, 2)
+        child = parent1.crossover(parent2)
+        
+        # Mutaatio
+        if random.random() < child.mutation_rate:
+            child = child.mutate()
+        
+        new_population.append(child)
+    
+    self.population = new_population
+    self.generation += 1
+    self.fitness_history.append(np.mean(fitness_scores))
+    
+    # Palauta paras
+    return paired[0][1]
+
+def get_best_dna(self) -> DNASequence:
+    """Hae populaation paras"""
+    return random.choice(self.population)  # Simplified - oikeasti fitness-based
+
+def analyze_dna(self, dna: DNASequence) -> Dict:
+    """Analysoi DNA:n ominaisuudet"""
+    return {
+        "generation": self.generation,
+        "visual_profile": dna.visual_genes,
+        "temporal_profile": dna.temporal_genes,
+        "narrative_archetype": dna.narrative_genes["archetype"],
+        "mutation_rate": round(dna.mutation_rate, 3),
+        "complexity_score": sum(dna.visual_genes.values()) / len(dna.visual_genes)
+    }
+
+---------------------------
+VII KUOJA PIPELINE
+---------------------------
+class ViikuojaEngine:
+"""
+Kuva → Video → Randomointi → Storyline → Endless Loop
+"""
+def __init__(self):
+    self.dna_entity = DNASynthesisEntity(population_size=8)
+    self.story_memory: deque = deque(maxlen=100)  # Viimeiset 100 framea/tapahtumaa
+    self.loop_buffer: List[Any] = []  # Endless loop varten
+    self.is_looping = False
+    self.generation_queue = queue.Queue()
+    
+    # Tilastot dashboardia varten
+    self.stats = {
+        "frames_generated": 0,
+        "dna_generations": 0,
+        "story_branches": 0,
+        "loop_cycles": 0
+    }
+
+def image_to_video(self, image_path: str, dna: DNASequence, 
+                   duration: float = 5.0, fps: int = 24) -> str:
+    """Kuva → Video DNA:n ohjaamana"""
+    frames = []
+    img = Image.open(image_path).convert("RGB")
+    w, h = img.size
+    
+    # DNA-ohjattu animaatio
+    total_frames = int(duration * fps)
+    
+    for i in range(total_frames):
+        progress = i / total_frames
+        
+        # DNA-efektit
+        saturation = dna.visual_genes["saturation"]
+        contrast = dna.visual_genes["contrast"]
+        motion_blur = dna.visual_genes["motion_blur"]
+        
+        # Ken Burns + DNA-mutaatio
+        zoom = 1.0 + (0.2 * progress * dna.temporal_genes["speed"])
+        pan_x = int(w * 0.1 * progress * random.uniform(-1, 1))
+        pan_y = int(h * 0.05 * progress * random.uniform(-1, 1))
+        
+        new_w = int(w / zoom)
+        new_h = int(h / zoom)
+        left = (w - new_w) // 2 + pan_x
+        top = (h - new_h) // 2 + pan_y
+        
+        # Rajojen tarkistus
+        left = max(0, min(left, w - new_w))
+        top = max(0, min(top, h - new_h))
+        
+        frame = img.crop((left, top, left + new_w, top + new_h))
+        frame = frame.resize((w, h), Image.Resampling.LANCZOS)
+        
+        # DNA-värimaailma
+        enhancer = ImageEnhance.Color(frame)
+        frame = enhancer.enhance(saturation)
+        enhancer = ImageEnhance.Contrast(frame)
+        frame = enhancer.enhance(contrast)
+        
+        # Motion blur DNA:n mukaan
+        if motion_blur > 0.3:
+            frame = frame.filter(ImageFilter.GaussianBlur(radius=motion_blur * 3))
+        
+        # Grain/noise
+        if dna.visual_genes["grain"] > 0.1:
+            frame = self._add_film_grain(frame, dna.visual_genes["grain"])
+        
+        frames.append(np.array(frame))
+    
+    # Tallenna video
+    output_path = f"viikuoja_{uuid.uuid4().hex[:8]}.mp4"
+    self._frames_to_video(frames, output_path, fps)
+    
+    self.stats["frames_generated"] += len(frames)
+    
+    return output_path
+
+def _add_film_grain(self, img: Image.Image, intensity: float) -> Image.Image:
+    """Lisää filmigrainiä"""
+    arr = np.array(img).astype(np.float32)
+    noise = np.random.randn(*arr.shape) * intensity * 50
+    arr = np.clip(arr + noise, 0, 255).astype(np.uint8)
+    return Image.fromarray(arr)
+
+def _frames_to_video(self, frames: List[np.ndarray], path: str, fps: int):
+    """Yhdistä framekuvat videoksi"""
+    if not frames:
+        return
+    
+    h, w = frames[0].shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(path, fourcc, fps, (w, h))
+    
+    for frame in frames:
+        # RGB → BGR OpenCV:lle
+        out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+    
+    out.release()
+
+def randomize_video(self, video_path: str, dna: DNASequence, 
+                    randomization_level: float = 0.5) -> str:
+    """Video → Randomoitu versio"""
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # DNA-ohjattu randomisointi
+        if random.random() < randomization_level:
+            # Värimutaatio
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV).astype(np.float32)
+            hsv[:, :, 0] += random.uniform(-10, 10)  # Hue shift
+            hsv[:, :, 1] *= random.uniform(0.8, 1.2)  # Saturation
+            frame = cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2BGR)
+        
+        if random.random() < randomization_level * 0.5:
+            # Geometrinen distortio
+            h, w = frame.shape[:2]
+            pts1 = np.float32([[0,0], [w,0], [0,h], [w,h]])
+            pts2 = np.float32([
+                [random.randint(-20, 20), random.randint(-20, 20)],
+                [w + random.randint(-20, 20), random.randint(-20, 20)],
+                [random.randint(-20, 20), h + random.randint(-20, 20)],
+                [w + random.randint(-20, 20), h + random.randint(-20, 20)]
+            ])
+            M = cv2.getPerspectiveTransform(pts1, pts2)
+            frame = cv2.warpPerspective(frame, M, (w, h))
+        
+        frames.append(frame)
+    
+    cap.release()
+    
+    output_path = f"randomized_{uuid.uuid4().hex[:8]}.mp4"
+    self._frames_to_video(frames, output_path, 24)
+    
+    return output_path
+
+def generate_storyline(self, segments: List[str], dna: DNASequence) -> str:
+    """Yhdistä segmentit storylineksi DNA:n narratiivin mukaan"""
+    archetype = dna.narrative_genes["archetype"]
+    conflict = dna.narrative_genes["conflict_level"]
+    resolution = dna.narrative_genes["resolution_type"]
+    
+    # Luo narratiivinen rakenne
+    storyboard = {
+        "archetype": archetype,
+        "acts": [],
+        "transitions": []
+    }
+    
+    # Jaa segmentit acts:hin archetypen mukaan
+    if archetype == "hero":
+        acts = ["call", "trials", "transformation", "return"]
+    elif archetype == "mystery":
+        acts = ["question", "clues", "revelation", "aftermath"]
+    elif archetype == "journey":
+        acts = ["departure", "encounters", "obstacles", "arrival"]
+    else:  # transformation
+        acts = ["status_quo", "disruption", "metamorphosis", "new_form"]
+    
+    # Assign segments to acts
+    for i, segment in enumerate(segments[:4]):  # Max 4 acts
+        if i < len(acts):
+            storyboard["acts"].append({
+                "name": acts[i],
+                "segment": segment,
+                "intensity": conflict * (0.5 + i * 0.2)
+            })
+    
+    # Lopullinen video
+    output_path = f"storyline_{archetype}_{uuid.uuid4().hex[:8]}.mp4"
+    
+    # Concatenate with DNA-ohjatut transitionit
+    self._concatenate_with_transitions(
+        [s["segment"] for s in storyboard["acts"]], 
+        output_path,
+        dna
+    )
+    
+    self.stats["story_branches"] += 1
+    
+    # Tallenna story muistiin
+    self.story_memory.append(storyboard)
+    
+    return output_path
+
+def _concatenate_with_transitions(self, segments: List[str], output: str, dna: DNASequence):
+    """Yhdistä videot DNA-ohjatulla transition tyylillä"""
+    # Simplified: käytä ffmpeg
+    import subprocess
+    
+    # Luo transition konfiguraatio
+    transition_speed = dna.temporal_genes["transition_speed"]
+    
+    # Tee temp lista
+    list_file = f"/tmp/concat_list_{uuid.uuid4().hex}.txt"
+    with open(list_file, 'w') as f:
+        for seg in segments:
+            f.write(f"file '{seg}'\n")
+    
+    # FFmpeg concat with DNA-ohjattu filter
+    cmd = [
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
+        '-i', list_file,
+        '-vf', f'fade=st=0:d={transition_speed}:alpha=1,format=yuv420p',
+        '-c:v', 'libx264', '-crf', '18',
+        output
+    ]
+    
+    subprocess.run(cmd, capture_output=True)
+    os.remove(list_file)
+
+def create_endless_loop(self, source_video: str, dna: DNASequence,
+                      target_duration: float = 60.0) -> str:
+    """Luo saumaton endless loop"""
+    self.is_looping = True
+    
+    # Analysoi lähdevideo
+    cap = cv2.VideoCapture(source_video)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    
+    # Loopin parametrit DNA:sta
+    loop_seamless = dna.temporal_genes["loop_seamless"]
+    speed = dna.temporal_genes["speed"]
+    
+    # Laske toistot
+    original_duration = total_frames / fps
+    loops_needed = int(target_duration / original_duration * speed)
+    
+    frames = []
+    cap = cv2.VideoCapture(source_video)
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frames.append(frame)
+    
+    cap.release()
+    
+    # Luo saumaton loop crossfade:llä
+    crossfade_frames = int(fps * (1 - loop_seamless) * 2)  # 2 sekuntia DNA:n mukaan
+    
+    output_frames = []
+    
+    for loop in range(loops_needed):
+        for i, frame in enumerate(frames):
+            # Crossfade alussa ja lopussa
+            if loop > 0 and i < crossfade_frames:
+                # Blend edellisen loopin loppuun
+                alpha = i / crossfade_frames
+                blended = cv2.addWeighted(
+                    output_frames[-(crossfade_frames - i)], 1 - alpha,
+                    frame, alpha, 0
+                )
+                output_frames.append(blended)
+            else:
+                output_frames.append(frame)
+    
+    output_path = f"endless_loop_{uuid.uuid4().hex[:8]}.mp4"
+    self._frames_to_video(output_frames, output_path, int(fps * speed))
+    
+    self.loop_buffer = output_frames
+    self.stats["loop_cycles"] += 1
+    
+    return output_path
+
+def get_dashboard_stats(self) -> Dict:
+    """Hae dashboard-tilastot"""
+    return {
+        **self.stats,
+        "dna_generation": self.dna_entity.generation,
+        "population_diversity": len(set(str(d.visual_genes) for d in self.dna_entity.population)),
+        "story_memory_size": len(self.story_memory),
+        "loop_active": self.is_looping,
+        "latest_dna": self.dna_entity.get_best_dna() if self.dna_entity.population else None
+    }
+
+---------------------------
+VII KUOJA DASHBOARD
+---------------------------
+def create_viikuoja_dashboard():
+"""Luo silmäkarkkia sisältävä dashboard"""
+engine = ViikuojaEngine()
+
+with gr.Blocks(theme=gr.themes.Soft(
+    primary_hue="violet",
+    secondary_hue="cyan",
+    neutral_hue="zinc"
+), css="""
+    .dna-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 10px; margin: 5px; }
+    .stat-box { background: rgba(0,0,0,0.7); color: #00ff88; font-family: monospace; padding: 10px; border-radius: 5px; }
+    .pipeline-stage { border-left: 3px solid #00ff88; padding-left: 15px; margin: 10px 0; }
+""") as demo:
+    
+    gr.Markdown("""
+    # 🧬 VII KUOJA GENESIS 2.0
+    ### DNA Synthesis Entity + Endless Loop Engine
+    *Kuva → Video → Randomointi → Storyline → ∞*
+    """)
+    
+    # LIVE DASHBOARD
+    with gr.Row():
+        with gr.Column(scale=2):
+            gr.Markdown("### 🧬 DNA Population")
+            dna_visualizer = gr.Plot(label="Population Diversity")
+        
+        with gr.Column(scale=1):
+            gr.Markdown("### 📊 Live Stats")
+            stats_display = gr.JSON(label="Engine Stats", value=engine.get_dashboard_stats())
+            refresh_stats = gr.Button("🔄 Refresh", size="sm")
+    
+    with gr.Tabs():
+        
+        # STAGE 1: IMAGE → VIDEO
+        with gr.Tab("1️⃣ Genesis (Kuva→Video)"):
+            with gr.Row():
+                with gr.Column():
+                    input_image = gr.Image(label="Seed Image", type="filepath")
+                    
+                    with gr.Group():
+                        gr.Markdown("#### 🧬 DNA Configuration")
+                        dna_selector = gr.Dropdown(
+                            choices=["evolve_new", "use_best", "random"],
+                            value="evolve_new",
+                            label="DNA Strategy"
+                        )
+                        duration = gr.Slider(3, 30, value=5, label="Duration (s)")
+                        mutation_rate = gr.Slider(0.01, 0.5, value=0.1, label="Mutation Rate")
+                    
+                    genesis_btn = gr.Button("🌟 CREATE LIFE", variant="primary")
+                
+                with gr.Column():
+                    genesis_video = gr.Video(label="Born Video")
+                    dna_analysis = gr.JSON(label="DNA Analysis")
+                    with gr.Row():
+                        download_dna = gr.Button("💾 Save DNA")
+                        evolve_btn = gr.Button("🧬 Evolve Next")
+        
+        # STAGE 2: RANDOMIZATION
+        with gr.Tab("2️⃣ Chaos (Randomointi)"):
+            with gr.Row():
+                with gr.Column():
+                    source_video = gr.Video(label="Source")
+                    randomness = gr.Slider(0.0, 1.0, value=0.5, label="Chaos Level")
+                    chaos_btn = gr.Button("🎲 Apply Chaos", variant="primary")
+                
+                with gr.Column():
+                    chaos_video = gr.Video(label="Randomized")
+                    chaos_dna = gr.JSON(label="Mutation DNA")
+        
+        # STAGE 3: STORYLINE
+        with gr.Tab("3️⃣ Narrative (Storyline)"):
+            with gr.Row():
+                with gr.Column():
+                    story_segments = gr.File(
+                        file_count="multiple",
+                        label="Video Segments (2-4)",
+                        file_types=[".mp4"]
+                    )
+                    archetype = gr.Dropdown(
+                        choices=["hero", "mystery", "journey", "transformation"],
+                        value="hero",
+                        label="Archetype"
+                    )
+                    conflict = gr.Slider(0.0, 1.0, value=0.5, label="Conflict Level")
+                    narrate_btn = gr.Button("📖 Weave Story", variant="primary")
+                
+                with gr.Column():
+                    story_video = gr.Video(label="Storyline")
+                    storyboard = gr.JSON(label="Storyboard")
+        
+        # STAGE 4: ENDLESS LOOP
+        with gr.Tab("4️⃣ ∞ Eternal (Endless Loop)"):
+            with gr.Row():
+                with gr.Column():
+                    loop_source = gr.Video(label="Source for Loop")
+                    target_duration = gr.Slider(10, 300, value=60, label="Target Duration (s)")
+                    seamlessness = gr.Slider(0.5, 1.0, value=0.9, label="Seamlessness")
+                    eternal_btn = gr.Button("♾️ Generate Eternal Loop", variant="primary")
+                
+                with gr.Column():
+                    eternal_video = gr.Video(label="Endless Loop")
+                    loop_stats = gr.JSON(label="Loop Statistics")
+        
+        # STAGE 5: FULL PIPELINE
+        with gr.Tab("🚀 FULL AUTO (All Stages)"):
+            gr.Markdown("### Yhden klikkauksen täysi pipeline")
+            
+            with gr.Row():
+                with gr.Column():
+                    auto_image = gr.Image(label="Seed", type="filepath")
+                    auto_iterations = gr.Slider(1, 5, value=2, step=1, label="Evolution Iterations")
+                    auto_btn = gr.Button("🚀 INITIATE GENESIS PROTOCOL", variant="primary", size="lg")
+                
+                with gr.Column():
+                    auto_status = gr.Textbox(label="Status", lines=10, interactive=False)
+                    final_output = gr.Video(label="Final Creation")
+    
+    # Event handlers
+    def do_genesis(image, strategy, dur, mut):
+        if not image:
+            return None, {}
+        
+        # Valitse tai luo DNA
+        if strategy == "evolve_new":
+            fitness = [random.random() for _ in engine.dna_entity.population]
+            dna = engine.dna_entity.evolve(fitness)
+        elif strategy == "use_best":
+            dna = engine.dna_entity.get_best_dna()
+        else:
+            dna = random.choice(engine.dna_entity.population)
+        
+        dna.mutation_rate = mut
+        
+        # Generoi
+        video_path = engine.image_to_video(image, dna, dur)
+        
+        return video_path, engine.dna_entity.analyze_dna(dna)
+    
+    def do_chaos(video, level):
+        if not video:
+            return None, {}
+        
+        dna = engine.dna_entity.get_best_dna().mutate()
+        result = engine.randomize_video(video, dna, level)
+        
+        return result, engine.dna_entity.analyze_dna(dna)
+    
+    def do_story(segments, arch, conf):
+        if not segments or len(segments) < 2:
+            return None, {"error": "Need 2-4 segments"}
+        
+        dna = engine.dna_entity.get_best_dna()
+        dna.narrative_genes["archetype"] = arch
+        dna.narrative_genes["conflict_level"] = conf
+        
+        result = engine.generate_storyline([s.name for s in segments], dna)
+        
+        storyboard = {
+            "archetype": arch,
+            "segments_used": len(segments),
+            "conflict_level": conf,
+            "dna_generation": engine.dna_entity.generation
+        }
+        
+        return result, storyboard
+    
+    def do_eternal(video, duration, seamless):
+        if not video:
+            return None, {}
+        
+        dna = engine.dna_entity.get_best_dna()
+        dna.temporal_genes["loop_seamless"] = seamless
+        
+        result = engine.create_endless_loop(video, dna, duration)
+        
+        stats = {
+            "target_duration": duration,
+            "seamlessness": seamless,
+            "actual_duration": duration,  # Simplified
+            "file": result
+        }
+        
+        return result, stats
+    
+    def do_full_auto(image, iterations):
+        if not image:
+            return "No image", None
+        
+        status = []
+        
+        # Stage 1: Genesis
+        status.append("🌟 STAGE 1: Genesis...")
+        dna = engine.dna_entity.get_best_dna()
+        video1 = engine.image_to_video(image, dna, 5.0)
+        status.append(f"   ✓ Video born: {video1}")
+        
+        # Stage 2: Chaos
+        status.append("🎲 STAGE 2: Chaos...")
+        dna = dna.mutate()
+        video2 = engine.randomize_video(video1, dna, 0.3)
+        status.append(f"   ✓ Randomized: {video2}")
+        
+        # Stage 3: Story (loop back)
+        status.append("📖 STAGE 3: Narrative...")
+        story = engine.generate_storyline([video1, video2], dna)
+        status.append(f"   ✓ Story woven: {story}")
+        
+        # Stage 4: Eternal
+        status.append("♾️ STAGE 4: Eternal Loop...")
+        eternal = engine.create_endless_loop(story, dna, 30.0)
+        status.append(f"   ✓ Eternity achieved: {eternal}")
+        
+        status.append(f"\n🧬 DNA evolved to generation {engine.dna_entity.generation}")
+        
+        return "\n".join(status), eternal
+    
+    def refresh():
+        return engine.get_dashboard_stats()
+    
+    # Bindings
+    genesis_btn.click(do_genesis, 
+                     [input_image, dna_selector, duration, mutation_rate],
+                     [genesis_video, dna_analysis])
+    
+    chaos_btn.click(do_chaos, [source_video, randomness], [chaos_video, chaos_dna])
+    
+    narrate_btn.click(do_story, [story_segments, archetype, conflict],
+                     [story_video, storyboard])
+    
+    eternal_btn.click(do_eternal, [loop_source, target_duration, seamlessness],
+                     [eternal_video, loop_stats])
+    
+    auto_btn.click(do_full_auto, [auto_image, auto_iterations],
+                  [auto_status, final_output])
+    
+    refresh_stats.click(refresh, outputs=stats_display)
+    
+    # Auto-refresh every 5s
+    demo.load(refresh, outputs=stats_display, every=5)
+
+return demo
+
+if name == "main":
+print("🧬 VII KUOJA GENESIS 2.0")
+print("DNA Synthesis Entity initialized")
+print("Endless Loop Engine ready")
+print("Dashboard loading...")
+dashboard = create_viikuoja_dashboard()
+dashboard.launch(share=False, server_name="0.0.0.0")
+
+🧬 VII KUOJA - Mitä sait:
+Stage	Toiminto	DNA-ohjaus
+1️⃣ Genesis	Kuva → Video	visual_genes (saturation, contrast, motion)
+2️⃣ Chaos	Randomointi	mutation_rate, chaos_level
+3️⃣ Narrative	Storyline	archetype, conflict_level
+4️⃣ Eternal	Endless Loop	seamlessness, speed
+🚀 Full Auto	Kaikki kerralla	Evoluutio läpi pipeline
+🖥️ Serverivaatimukset DNA Synthesis Entiteetille:
+MINIMUM:
+•  8GB RAM (16GB suositeltu)
+•  GPU: GTX 1060 6GB / RTX 2060
+•  CPU: 4-core moderni
+•  Storage: 10GB temp-tilaa videoille
+RECOMMENDED (silmäkarkkiversio):
+•  32GB RAM
+•  GPU: RTX 3080+ (12GB+ VRAM)
+•  CPU: 8-core
+•  NVMe SSD: 50GB
+•  CUDA 11.8+
+CLOUD (jos oma kone ei riitä):
+•  RunPod / Vast.ai: RTX 3090 instance ~$0.40/h
+•  Google Colab Pro+: $10/kk
+•  AWS g4dn.xlarge: ~$0.50/h
+DNA Entity on kevyt (evoluutioalgoritmi), mutta video processing syö resurssit. GPU nopeuttaa 10-50x!
+Nyt sulla on ynnenmässy joka elää ja hengittää! 🧬🔥♾️
+
